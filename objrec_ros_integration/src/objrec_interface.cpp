@@ -371,8 +371,6 @@ bool ObjRecInterface::recognize_objects(
     }
 
     // Remove plane points
-    /*if(use_only_points_above_plane_)
-    {
         ROS_DEBUG("ObjRec: Removing points not above plane with PCL...");
         // Create the segmentation object
         pcl::SACSegmentation<pcl::PointXYZRGB> seg;
@@ -435,7 +433,7 @@ bool ObjRecInterface::recognize_objects(
                         it->z);
             }
         }
-    } else {*/
+    /*} else {
         // Fill the foreground cloud
         foreground_points->SetNumberOfPoints(cloud->points.size());
         foreground_points->Reset();
@@ -450,7 +448,7 @@ bool ObjRecInterface::recognize_objects(
                     it->y,
                     it->z);
         }
-   //}
+   }*/
 
     // Detect models
     {
