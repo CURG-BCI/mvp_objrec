@@ -130,8 +130,21 @@ ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
     objrec_->setNumberOfThreads(num_threads_);
     objrec_->setCUDADeviceMap(cuda_device_map_);
 
-    // Get model info from rosparam
-    this->load_models_from_rosparam();
+    isBlockMode = false;
+    string experiment_type;
+    if (nh.getParam("/experiment_type", experiment_type)) {
+        if (experiment_type == "block") {
+            isBlockMode = true;
+        }
+    }
+
+    if (isBlockMode) {
+        // Get block
+        this->load_block_model();
+    } else {
+        // Get model info from rosparam
+        this->load_models_from_rosparam();
+    }
 
     // Get additional parameters from ROS
     require_param(nh,"success_probability",success_probability_);
@@ -210,6 +223,78 @@ vtkSmartPointer<vtkPolyData> scale_vtk_model(vtkSmartPointer<vtkPolyData> & m, d
   tpd->SetTransform(transp);
   tpd->Update();
   return tpd->GetOutput();
+}
+
+void ObjRecInterface::load_block_model()
+{
+    ROS_INFO_STREAM("Loading block only...");
+
+    std::string model_label = "block";
+
+    // Get the mesh uri & store it
+    require_param(nh_,"model_uris/"+model_label,block_model_vtk);
+    // TODO: make this optional
+    require_param(nh_,"stl_uris/"+model_label,block_model_stl);
+
+    ROS_INFO_STREAM("Adding model \""<<model_label<<"\" from "<<block_model_vtk);
+    // Fetch the model data with a ros resource retriever
+    resource_retriever::Retriever retriever;
+    resource_retriever::MemoryResource resource;
+
+    try {
+        resource = retriever.get(block_model_vtk);
+    } catch (resource_retriever::Exception& e) {
+        ROS_ERROR_STREAM("Failed to retrieve \""<<model_label<<"\" model file from \""<<block_model_vtk<<"\" error: "<<e.what());
+        return;
+    }
+
+    // Load the model into objrec
+    vtkSmartPointer<vtkPolyDataReader> reader =
+        vtkSmartPointer<vtkPolyDataReader>::New();
+    // This copies the data from the resource structure into the polydata reader
+    reader->SetBinaryInputString(
+            (const char*)resource.data.get(),
+            resource.size);
+    reader->ReadFromInputStringOn();
+    reader->Update();
+    readers_.push_back(reader);
+
+    // Get the VTK normals
+    vtkSmartPointer<vtkPolyData> polydata(reader->GetOutput());
+    vtkSmartPointer<vtkFloatArray> point_normals(
+            vtkFloatArray::SafeDownCast(polydata->GetPointData()->GetNormals()));
+
+    if(!point_normals) {
+        ROS_ERROR_STREAM("No vertex normals for mesh: "<<block_model_vtk);
+        return;
+    }
+
+    // Get the VTK points
+    size_t n_points = polydata->GetNumberOfPoints();
+    size_t n_normals = point_normals->GetNumberOfTuples();
+
+    if(n_points != n_normals) {
+        ROS_ERROR_STREAM("Different numbers of vertices and vertex normals for mesh: "<<block_model_vtk);
+        return;
+    }
+
+    // This is just here for reference
+    for(vtkIdType i = 0; i < n_points; i++)
+    {
+        double pV[3];
+        double pN[3];
+
+        polydata->GetPoint(i, pV);
+        point_normals->GetTuple(i, pN);
+    }
+
+    // Create new model user data
+    block_user_data = new UserData();
+    block_user_data->setLabel(model_label.c_str());
+
+    vtkSmartPointer<vtkPolyData> model_data = reader->GetOutput();
+    block_model_data = scale_vtk_model(model_data);
+
 }
 
 void ObjRecInterface::add_model(
@@ -371,90 +456,82 @@ bool ObjRecInterface::recognize_objects(
     }
 
     // Remove plane points
-        ROS_DEBUG("ObjRec: Removing points not above plane with PCL...");
-        // Create the segmentation object
-        pcl::SACSegmentation<pcl::PointXYZRGB> seg;
-        // Optional
-        seg.setOptimizeCoefficients (true);
-        // Mandatory
-        seg.setModelType (pcl::SACMODEL_PLANE);
-        seg.setMethodType (pcl::SAC_RANSAC);
-        seg.setDistanceThreshold (0.01);
+    ROS_DEBUG("ObjRec: Removing points not above plane with PCL...");
+    // Create the segmentation object
+    pcl::SACSegmentation<pcl::PointXYZRGB> seg;
+    // Optional
+    seg.setOptimizeCoefficients (true);
+    // Mandatory
+    seg.setModelType (pcl::SACMODEL_PLANE);
+    seg.setMethodType (pcl::SAC_RANSAC);
+    seg.setDistanceThreshold (0.01);
 
-        seg.setInputCloud (cloud);
-        seg.segment (*inliers, *coefficients);
+    seg.setInputCloud (cloud);
+    seg.segment (*inliers, *coefficients);
 
-        if (inliers->indices.size () == 0)
-        {
-            ROS_ERROR_STREAM("Could not estimate a planar model for the given dataset.");
-            return false;
-        }
+    if (inliers->indices.size () == 0)
+    {
+        ROS_ERROR_STREAM("Could not estimate a planar model for the given dataset.");
+        return false;
+    }
 
-        ROS_DEBUG_STREAM("Objrec: found plane with "<<inliers->indices.size()<<" points");
+    ROS_DEBUG_STREAM("Objrec: found plane with "<<inliers->indices.size()<<" points");
 
-        // Flip plane if it's pointing away
-        if(coefficients->values[2] > 0.0) {
-            coefficients->values[0] *= -1.0;
-            coefficients->values[1] *= -1.0;
-            coefficients->values[2] *= -1.0;
-            coefficients->values[3] *= -1.0;
-        }
+    // Flip plane if it's pointing away
+    if(coefficients->values[2] > 0.0) {
+        coefficients->values[0] *= -1.0;
+        coefficients->values[1] *= -1.0;
+        coefficients->values[2] *= -1.0;
+        coefficients->values[3] *= -1.0;
+    }
 
-        // Remove the plane points and extract the rest
-        // TODO: Is this double work??
-        pcl::ExtractIndices<pcl::PointXYZRGB> extract;
-        extract.setInputCloud(cloud);
-        extract.setIndices(inliers);
-        extract.setNegative(true);
-        extract.filter(*cloud);
+    // Remove the plane points and extract the rest
+    // TODO: Is this double work??
+    pcl::ExtractIndices<pcl::PointXYZRGB> extract;
+    extract.setInputCloud(cloud);
+    extract.setIndices(inliers);
+    extract.setNegative(true);
+    extract.filter(*cloud);
 
-        ROS_DEBUG_STREAM("Objrec: extracted "<<cloud->points.size()<<" foreground points");
+    ROS_DEBUG_STREAM("Objrec: extracted "<<cloud->points.size()<<" foreground points");
 
-        // Fill the foreground cloud
-        foreground_points->SetNumberOfPoints(cloud->points.size());
-        foreground_points->Reset();
+    // Fill the foreground cloud
+    foreground_points->SetNumberOfPoints(cloud->points.size());
+    foreground_points->Reset();
 
-        // Require the points are inside of the clopping box
-        for (pcl::PointCloud<pcl::PointXYZRGB>::const_iterator it = cloud->begin();
-                it != cloud->end();
-                ++it)
-        {
-            const double dist =
-                it->x * coefficients->values[0] +
-                it->y * coefficients->values[1] +
-                it->z * coefficients->values[2] +
-                coefficients->values[3];
+    // Require the points are inside of the clopping box
+    for (pcl::PointCloud<pcl::PointXYZRGB>::const_iterator it = cloud->begin();
+            it != cloud->end();
+            ++it)
+    {
+        const double dist =
+            it->x * coefficients->values[0] +
+            it->y * coefficients->values[1] +
+            it->z * coefficients->values[2] +
+            coefficients->values[3];
 
-            if(dist > plane_thickness_/2.0) {
-                // Add point if it's above the plane
-                foreground_points->InsertNextPoint(
-                        it->x,
-                        it->y,
-                        it->z);
-            }
-        }
-    /*} else {
-        // Fill the foreground cloud
-        foreground_points->SetNumberOfPoints(cloud->points.size());
-        foreground_points->Reset();
-
-        // Require the points are inside of the clopping box
-        for (pcl::PointCloud<pcl::PointXYZRGB>::const_iterator it = cloud->begin();
-                it != cloud->end();
-                ++it)
-        {
+        if(dist > plane_thickness_/2.0) {
+            // Add point if it's above the plane
             foreground_points->InsertNextPoint(
                     it->x,
                     it->y,
                     it->z);
         }
-   }*/
+    }
 
     // Detect models
     {
         ROS_DEBUG_STREAM("ObjRec: Attempting recognition on "<<foreground_points->GetNumberOfPoints()<<" foregeound points...");
         detected_models.clear();
-        int success = objrec_->doRecognition(foreground_points, success_probability_, detected_models);
+
+        int success;
+
+        if (isBlockMode) {
+            success = blockRecognition(foreground_points, detected_models);
+        } else {
+            success = objrec_->doRecognition(foreground_points, success_probability_, detected_models);
+        }
+
         if (success == -1){
             ROS_ERROR_STREAM("success -1");
         }
@@ -469,6 +546,34 @@ bool ObjRecInterface::recognize_objects(
     }
 
     return true;
+}
+int ObjRecInterface::blockRecognition(vtkPoints* scene, list<boost::shared_ptr<PointSetShape> >& out)
+{
+    if ( scene->GetNumberOfPoints() <= 0 )
+        return -1;
+
+    //for (  ) // loop through blocks
+    //{
+
+        double *rigid_transform = new double[12];
+        // Rotational part
+        rigid_transform[0] = 1; rigid_transform[1] = 0; rigid_transform[2] = 0;
+        rigid_transform[3] = 0; rigid_transform[4] = 1; rigid_transform[5] = 0;
+        rigid_transform[6] = 0; rigid_transform[7] = 0; rigid_transform[8] = 1;
+        // The translation
+        rigid_transform[9]  = 0;
+        rigid_transform[10] = 0;
+        rigid_transform[11] = 0;
+
+        boost::shared_ptr<PointSetShape> shape = boost::make_shared<PointSetShape>(block_user_data, block_model_data, rigid_transform, block_model_data);
+        // Save the new created shape
+        out.push_back(shape);
+
+        delete rigid_transform;
+    //}
+
+    return 0;
+
 }
 
 bool ObjRecInterface::recognizeObjects(objrec_ros_integration::FindObjects::Request &req, objrec_ros_integration::FindObjects::Response &res)
@@ -590,7 +695,17 @@ bool ObjRecInterface::recognizeObjects(objrec_ros_integration::FindObjects::Requ
     {
         objrec_msgs::PointSetShape object = *it;
         res.object_name.push_back(object.label);
+
+        std::cout << std::endl;
+        std::cout << std::endl;
+        std::cout << std::endl;
+        std::cout << std::endl;
+        std::cout << "object name: " << object.label << std::endl;
         res.object_pose.push_back(object.pose);
+        std::cout << std::endl;
+        std::cout << std::endl;
+        std::cout << std::endl;
+        std::cout << std::endl;
 
     }
     /*
@@ -665,8 +780,11 @@ void ObjRecInterface::publish_markers(const objrec_msgs::RecognizedObjects &obje
 //marker.pose.orientation.z = 0 - marker.pose.orientation.z;
 
 
-
-        marker.mesh_resource = stl_uris_[it->label];
+        if (isBlockMode) {
+            marker.mesh_resource = block_model_stl;
+        } else {
+            marker.mesh_resource = stl_uris_[it->label];
+        }
 
         marker_array.markers.push_back(marker);
     }

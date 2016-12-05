@@ -121,6 +121,15 @@ namespace objrec_ros_integration {
     bool use_cuda_;
     std::vector<int> cuda_device_map_;
 
+    // Block experiment mode
+    bool isBlockMode;
+    std::string block_model_vtk;
+    std::string block_model_stl;
+    vtkPolyData *block_model_data;
+    UserData *block_user_data;
+    void load_block_model();
+    int blockRecognition(vtkPoints* scene, list<boost::shared_ptr<PointSetShape> >& out);
+
     // Enable iterative closest point post-processing
     bool icp_post_processing_;
     // This should equal the number of CPU cores

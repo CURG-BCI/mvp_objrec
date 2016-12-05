@@ -1,8 +1,10 @@
 <launch>
+  <arg name="experiment_type" default="normal" />
   <node pkg="objrec_ros_integration" type="objrec_node" name="objrec_node" output="screen">
     <remap from="~/points" to="/camera/depth_registered/points"/>
- </node>
-
+    <param name="experiment_type" value="$(arg experiment_type)"/>
+  </node>
+  <node pkg="objrec_ros_integration" type="objrec_blocks" name="objrec_blocks" respawn="true" />
   <group ns="objrec_node">
     <include file="$(find objrec_ros_integration)/launch/parameters.launch"/>
     <include file="$(find objrec_ros_integration)/launch/models.launch"/>
