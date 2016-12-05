@@ -6,7 +6,8 @@ project(objrec_ros_integration)
 # TODO: remove all from COMPONENTS that are not catkin packages.
 find_package(catkin REQUIRED COMPONENTS roscpp tf geometry_msgs kdl_conversions
   visualization_msgs sensor_msgs pcl_ros pcl_conversions resource_retriever
-  dynamic_reconfigure nodelet objrec_msgs objrec_core message_generation)
+  dynamic_reconfigure nodelet objrec_msgs objrec_core message_generation
+  image_transport cv_bridge)
 
 # Build vtk-stl converter
 find_package(VTK REQUIRED)
@@ -54,6 +55,7 @@ else()
   add_executable(objrec_node src/objrec_node.cpp)
 endif()
 
+add_executable(objrec_blocks src/objrec_blocks.cpp)
 
 #find_library(ObjRecRANSAC_LIBRARY ObjRecRANSAC)
 
@@ -61,7 +63,8 @@ MESSAGE( STATUS "catkin_LIBRARIES " ${catkin_LIBRARIES} )
 
 target_link_libraries(objrecransac_interface ${VTK_LIBS} vtkHybrid ${catkin_LIBRARIES})
 target_link_libraries(objrecransac_nodelet objrecransac_interface ${catkin_LIBRARIES})
-target_link_libraries(objrec_node objrecransac_interface ${catkin_LIBRARIES}) 
+target_link_libraries(objrec_node objrecransac_interface ${catkin_LIBRARIES})
+target_link_libraries(objrec_blocks ${catkin_LIBRARIES})
 
 install(DIRECTORY data
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION})
