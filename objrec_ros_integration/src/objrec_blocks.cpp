@@ -334,9 +334,6 @@ int findBlocks(list<boost::shared_ptr<PointSetShape> >& out)
     /// Find orientation and draw contours
     for( int i = 0; i < contours.size(); i++ ) {
 
-        // Ignore tiny contours found from noise in image (like a dent in foam)
-        if (mu[i].m00 < 700) continue;
-
         Scalar color = Scalar( rng.uniform(0, 255), rng.uniform(0,255), rng.uniform(0,255) );
 
         drawContours( croppedImg, contours, i, color, 2, 8, hierarchy, 0, Point() );
@@ -363,6 +360,8 @@ int findBlocks(list<boost::shared_ptr<PointSetShape> >& out)
         int px = pxMin + mc[i].x;
         int py = pyMin + mc[i].y;
         //std::cout << pxMin << ", " << pyMin << ", " << mc[i].x << ", " << mc[i].y << std::endl;
+
+        // get corresponding point cloud point
         pcl::PointXYZ pt = world_pc[py*1920 + px];
 
         if (isnan(pt.x) || isnan(pt.y)) {
@@ -373,14 +372,15 @@ int findBlocks(list<boost::shared_ptr<PointSetShape> >& out)
         // transform point into camera frame to publish
         double min_dist = std::numeric_limits<double>::max();
         int min_idx = 0;
-        for (int i = 0; i < object_centers.size(); i++) {
-            double dist = (object_centers[i].x - pt.x) * (object_centers[i].x - pt.x);
-            dist += (object_centers[i].y - pt.y) * (object_centers[i].y - pt.y);
-            dist += (object_centers[i].z - pt.z) * (object_centers[i].z - pt.z);
+        // hacky way to match point cloud cluster center to rgb img center by comparing distances
+        for (int j = 0; j < object_centers.size(); j++) {
+            double dist = (object_centers[j].x - pt.x) * (object_centers[j].x - pt.x);
+            dist += (object_centers[j].y - pt.y) * (object_centers[j].y - pt.y);
+            dist += (object_centers[j].z - pt.z) * (object_centers[j].z - pt.z);
 
             if (dist < min_dist) {
                 min_dist = dist;
-                min_idx = i;
+                min_idx = j;
             }
             //std::cout << "center: " <<  << ", " << object_centers[i].y << ", " << object_centers[i].z << std::endl;
         }
@@ -402,6 +402,10 @@ int findBlocks(list<boost::shared_ptr<PointSetShape> >& out)
         rigid_transform[9]  = cam_pt.x();
         rigid_transform[10] = cam_pt.y();
         rigid_transform[11] = cam_pt.z();
+
+        // Ignore tiny contours found from noise in image (like a dent in foam)
+        std::cout << "area " << i << ": " << mu[i].m00 << std::endl;
+        if (mu[i].m00 < 500) continue;
 
         boost::shared_ptr<PointSetShape> shape = boost::make_shared<PointSetShape>(block_user_data, block_model_data, rigid_transform, block_model_data);
         out.push_back(shape);
