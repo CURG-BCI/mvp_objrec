@@ -1,6 +1,6 @@
 <launch>
   <!-- ObjRec Parameters (in millimeter) -->
-  <param name="pair_width" value="0.035"/>
+  <param name="pair_width" value="0.02"/>
   <!-- Pair width should be roughly half the extent of the visible object
        part. This means, for each object point p there should be (at least) one
        point q (from the same object) such that ||p - q|| <= 'pairwidth'.
@@ -17,7 +17,7 @@
        thus will make normal computation unreliable. Processing time, of
        course, will increase with smaller voxel size. -->
 
-  <param name="object_visibility" value="0.1"/>
+  <param name="object_visibility" value="0.2"/>
   <!-- Object visibility is the expected visible object part expressed as
        fraction of the hole object. For example 'objectVisibility = 0.1' means
        that 10% of the object surface is visible in the scene. Note that the
@@ -51,10 +51,21 @@
   <param name="use_cuda" value="true" />
 
   <!-- Clipping box -->
-  <param name="x_clip_min" value="-0.2"/>
-  <param name="x_clip_max" value="0.23"/>
-  <param name="y_clip_min" value="-0.65"/>
-  <param name="y_clip_max" value="0.1"/>
-  <param name="z_clip_min" value="0.0"/>
-  <param name="z_clip_max" value="0.4"/>
+  <param name="x_clip_min1" value="-0.2"/>
+  <param name="x_clip_max1" value="0.23"/>
+  <param name="y_clip_min1" value="-0.65"/>
+  <param name="y_clip_max1" value="0.1"/>
+  <param name="z_clip_min1" value="0.0"/>
+  <param name="z_clip_max1" value="0.4"/>
+
+  <param name="x_clip_min" value="-0.58"/>
+  <param name="x_clip_max" value="-0.18"/>
+  <param name="y_clip_min" value="0.128"/>
+  <param name="y_clip_max" value="0.52"/>
+  <param name="z_clip_min" value="-0.1"/>
+  <param name="z_clip_max" value="0.35"/>
+
+  <param name="use_z_clip" value="false"/>
+  <param name="use_x_clip" value="true"/>
+  <param name="use_y_clip" value="true"/>
 </launch>
