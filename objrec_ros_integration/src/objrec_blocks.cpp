@@ -41,12 +41,12 @@ bool rgbInit;
 ros::NodeHandle* n;
 ros::Publisher blocks_pc_pub;
 
-float x_clip_min;
-float x_clip_max;
-float y_clip_min;
-float y_clip_max;
 float z_clip_min;
 float z_clip_max;
+int img_x_min;
+int img_x_max;
+int img_y_min;
+int img_y_max;
 
 tf::TransformListener *tf_listener;
 std::string block_model_vtk;
@@ -57,7 +57,7 @@ void load_block_model();
 ros::Publisher objects_pub_;
 ros::Publisher markers_pub_;
 
-boost::shared_ptr<pcl::PointCloud<pcl::PointXYZ> > cloud;
+boost::shared_ptr<pcl::PointCloud<pcl::PointXYZRGB> > cloud;
 
 boost::mutex buffer_mutex_;
 std::list<vtkSmartPointer<vtkPolyDataReader> > readers_;
@@ -94,64 +94,17 @@ void getCloud(const sensor_msgs::PointCloud2ConstPtr &points_msg)
     boost::mutex::scoped_lock buffer_lock(buffer_mutex_);
 
     // Convert to PCL cloud
-    boost::shared_ptr<pcl::PointCloud<pcl::PointXYZ> > cloud_tmp(new pcl::PointCloud<pcl::PointXYZ>);
+    boost::shared_ptr<pcl::PointCloud<pcl::PointXYZRGB> > cloud_tmp(new pcl::PointCloud<pcl::PointXYZRGB>);
     pcl::fromROSMsg(*points_msg, *cloud_tmp);
 
     cloud = cloud_tmp;
 }
-cv::Rect getImageRect(pcl::PointCloud<pcl::PointXYZ> &world_pc, int &_pxMin, int &_pyMin)
+cv::Rect getImageRect(int &_pxMin, int &_pyMin)
 {
-    /*static int _pxMin = 0, _pyMin = 0, pxMax = 0, pyMax = 0;
-    if (_pxMin == 0 || _pyMin == 0) {
-        pxMax = 0; pyMax = 0;
-        pxMin = 0; pyMin = 0;
-        for (int i = 0; i < 1920; i++) {
-
-            pcl::PointXYZ pt = world_pc[1036800 + i]; // use middle column pixels
-            if (isnan(pt.x)) continue;
-
-            // Note: x is increasing in opposite direction from array access
-            if (pxMin == 0 && pt.x < x_clip_max) {
-                pxMin = i;
-            }
-            if (pxMax == 0 && pt.x < x_clip_min) {
-                pxMax = i;
-                break;
-            }
-        }
-
-        for (int i = 0; i < 2073600; i += 1920) {
-
-            pcl::PointXYZ pt = world_pc[960 + i]; // use middle row pixels
-            if (isnan(pt.y)) continue;
-
-            if (pyMin == 0 && pt.y > y_clip_min) {
-                pyMin = i / 1920;
-            }
-            if (pyMax == 0 && pt.y > y_clip_max) {
-                pyMax = i / 1920;
-                break;
-            }
-        }
-        _pxMin = pxMin;
-        _pyMin = pyMin;
-        cout << "cropping first time only..." << endl;
-    } else {
-        pxMin = _pxMin;
-        pyMin = _pyMin;
-    }*/
-//    int pxMin = 681;
-//    int pxMax = 1269;
-//    int pyMin = 142;
-//    int pyMax = 627;
-    int pxMin = 420;
-    int pxMax = 840;//world_pc.width();
-    int pyMin = 420;
-    int pyMax = 820;//world_pc.height();
-    cout << "---> cropping image bounds: " << pxMin << ", " << pxMax << ", " << pyMin << ", " << pyMax << endl;
-    _pxMin = pxMin;
-    _pyMin = pyMin;
-    cv::Rect rect(pxMin, pyMin, pxMax - pxMin, pyMax - pyMin);
+    cout << "---> cropping image bounds: " << img_x_min << ", " << img_x_max << ", " << img_y_min << ", " << img_y_max << endl;
+    _pxMin = img_x_min;
+    _pyMin = img_y_min;
+    cv::Rect rect(img_x_min, img_y_min, img_x_max - img_x_min, img_y_max - img_y_min);
     return rect;
 }
 
@@ -171,36 +124,44 @@ int findBlocks(list<boost::shared_ptr<PointSetShape> >& out)
     boost::mutex::scoped_lock buffer_lock(buffer_mutex_);
 
     // transform from camera frame to world frame
-    pcl::PointCloud<pcl::PointXYZ> world_pc;
+    pcl::PointCloud<pcl::PointXYZRGB> world_pc;
     cloud->header.frame_id = "/kinect2_rgb_optical_frame";
     pcl_ros::transformPointCloud("/world", *cloud, world_pc, *tf_listener);
 
     // get the clipped point cloud
-    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_transformed(new pcl::PointCloud<pcl::PointXYZ>());
-    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_filtered_x(new pcl::PointCloud<pcl::PointXYZ>());
-    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_filtered_xy(new pcl::PointCloud<pcl::PointXYZ>());
-    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_filtered_xyz(new pcl::PointCloud<pcl::PointXYZ>());
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_transformed(new pcl::PointCloud<pcl::PointXYZRGB>());
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_filtered_xy(new pcl::PointCloud<pcl::PointXYZRGB>());
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_filtered_xyz(new pcl::PointCloud<pcl::PointXYZRGB>());
 
     pcl_ros::transformPointCloud("/world", *cloud, *cloud_transformed, *tf_listener);
 
-    pcl::PassThrough<pcl::PointXYZ > pass;
-    pass.setInputCloud(cloud_transformed);
-    pass.setFilterFieldName ("x");
-    pass.setFilterLimits (x_clip_min, x_clip_max);
-    pass.filter(*cloud_filtered_x);
+    // TODO: try removing plane via SACSegmentation
+    // crop point cloud based on 2d indices corresponding to rgb image
+    pcl::ExtractIndices<pcl::PointXYZRGB > eifilter;
+    eifilter.setInputCloud(cloud_transformed);
+    pcl::IndicesPtr indices(new std::vector<int>);
 
-    pass.setInputCloud(cloud_filtered_x);
-    pass.setFilterFieldName ("y");
-    pass.setFilterLimits (y_clip_min, y_clip_max);
-    pass.filter(*cloud_filtered_xy);
+    size_t row_width = 1920;
+    size_t row_start = img_y_min * row_width;
+    size_t row_end = img_y_max * row_width;
+    size_t col_start = img_x_min;
+    size_t col_end = img_x_max;
+    for (int i = row_start; i < row_end; i += row_width) { //2073600
+        for (int j = col_start; j < col_end; j++) {
+            indices->push_back(i + j);
+        }
+    }
+    eifilter.setIndices(indices);
+    eifilter.filter(*cloud_filtered_xy);
 
+    pcl::PassThrough<pcl::PointXYZRGB > pass;
     pass.setInputCloud(cloud_filtered_xy);
     pass.setFilterFieldName ("z");
     pass.setFilterLimits (z_clip_min, z_clip_max);
     pass.filter(*cloud_filtered_xyz);
 
     /* publish for debugging */
-    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_transformed_back(new pcl::PointCloud<pcl::PointXYZ>());
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_transformed_back(new pcl::PointCloud<pcl::PointXYZRGB>());
     cloud_filtered_xyz->header.frame_id = "/world";
     pcl_ros::transformPointCloud("/kinect2_rgb_optical_frame",
                 *cloud_filtered_xyz,
@@ -217,84 +178,13 @@ int findBlocks(list<boost::shared_ptr<PointSetShape> >& out)
 
     blocks_pc_pub.publish(cloud_transformed_back_msg);
 
-    // Create the segmentation object
-    /*pcl::ModelCoefficients::Ptr coefficients (new pcl::ModelCoefficients);
-    pcl::PointIndices::Ptr inliers (new pcl::PointIndices);
-
-    pcl::SACSegmentation<pcl::PointXYZ> seg;
-    // Optional
-    seg.setOptimizeCoefficients (true);
-    // Mandatory
-    seg.setModelType (pcl::SACMODEL_PLANE);
-    seg.setMethodType (pcl::SAC_RANSAC);
-    seg.setDistanceThreshold (0.01);
-
-    seg.setInputCloud (cloud_filtered_xy);
-    seg.segment (*inliers, *coefficients);
-
-    if (inliers->indices.size () == 0)
-    {
-        ROS_ERROR_STREAM("Could not estimate a planar model for the given dataset.");
-        return false;
-    }
-
-    ROS_DEBUG_STREAM("Objrec: found plane with "<<inliers->indices.size()<<" points");
-
-    // Flip plane if it's pointing away
-    if(coefficients->values[2] > 0.0) {
-        coefficients->values[0] *= -1.0;
-        coefficients->values[1] *= -1.0;
-        coefficients->values[2] *= -1.0;
-        coefficients->values[3] *= -1.0;
-    }
-
-    // Remove the plane points and extract the rest
-    // TODO: Is this double work??
-    pcl::ExtractIndices<pcl::PointXYZ> extract;
-    extract.setInputCloud(cloud_filtered_xy);
-    extract.setIndices(inliers);
-    extract.setNegative(true);
-    extract.filter(*cloud_filtered_xy);
-
-    std::cout << "Objrec: extracted "<< cloud_filtered_xy->points.size()<<" foreground points" << std::endl;
-
-    // Fill the foreground cloud
-    double plane_thickness_ = 0.015;
-
-    // Require the points are inside of the clopping box
-    for (pcl::PointCloud<pcl::PointXYZ>::const_iterator it = cloud_filtered_xy->begin();
-            it != cloud_filtered_xy->end();
-            ++it)
-    {
-        const double dist =
-            it->x * coefficients->values[0] +
-            it->y * coefficients->values[1] +
-            it->z * coefficients->values[2] +
-            coefficients->values[3];
-
-        if(dist > plane_thickness_/2.0) {
-            // Add point if it's above the plane
-
-            pcl::PointXYZ pt;
-            pt.x = it->x;
-            pt.y = it->y;
-            pt.z = it->z;
-            cloud_filtered_xyz->points.push_back(pt);
-
-            std::cout << "add point" << std::endl;
-        }
-    }
-
-    std::cout << "cloudsize:" << cloud_filtered_xyz->points.size() << std::endl;*/
-    //foreground_points_pub_.publish(cloud_filtered_xyz);
-
     // euclidean cluster extraction
     // create KdTree object for search method of extraction
-    pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
+    pcl::search::KdTree<pcl::PointXYZRGB>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZRGB>);
     tree->setInputCloud(cloud_filtered_xyz);
 
     std::vector<pcl::PointIndices> cluster_indices;
-    pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
+    pcl::EuclideanClusterExtraction<pcl::PointXYZRGB> ec;
     ec.setClusterTolerance(0.02); // 2cm
     ec.setMinClusterSize(10);
     ec.setMaxClusterSize(25000);
@@ -303,7 +193,7 @@ int findBlocks(list<boost::shared_ptr<PointSetShape> >& out)
     ec.extract(cluster_indices);
 
     // find center of mass of each cluster
-    std::cout << "found " << cluster_indices.size() << "clusters..." << std::endl;
+    std::cout << "found " << cluster_indices.size() << " clusters..." << std::endl;
     std::vector<pcl::PointXYZ> object_centers;
     for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin(); it != cluster_indices.end(); ++it)
     {
@@ -331,7 +221,7 @@ int findBlocks(list<boost::shared_ptr<PointSetShape> >& out)
     /* find orientation from 2d RGB image */
     // crop the 2d image based on x and y clipping values
     int pxMin = 0, pyMin = 0;
-    cv::Rect rect = getImageRect(world_pc, pxMin, pyMin);
+    cv::Rect rect = getImageRect(pxMin, pyMin);
 
     cv::Mat croppedImg;
     croppedImg = rgbImg(rect);
@@ -383,7 +273,7 @@ int findBlocks(list<boost::shared_ptr<PointSetShape> >& out)
         std::cout << "clusters left: " << object_centers.size() << std::endl;
         std::cout << "area " << i << ": " << mu[i].m00 << " vs rectArea: " << rectArea << std::endl;
         //if (mu[i].m00 < 500) continue; // use rectArea, moments sometimes returns too small for some reason
-        if (rectArea < 700) continue;
+        if (rectArea < 600) continue;
 
         Scalar color = Scalar( rng.uniform(0, 255), rng.uniform(0,255), rng.uniform(0,255) );
 
@@ -407,15 +297,12 @@ int findBlocks(list<boost::shared_ptr<PointSetShape> >& out)
         }
         int px = pxMin + mc[i].x;
         int py = pyMin + mc[i].y;
-        //std::cout << pxMin << ", " << pyMin << ", " << mc[i].x << ", " << mc[i].y << std::endl;
 
         // get corresponding point cloud point
-        pcl::PointXYZ pt = world_pc[py*1920 + px];
-
+        pcl::PointXYZRGB pt = world_pc[py*1920 + px];
         if (isnan(pt.x) || isnan(pt.y)) {
             pt = world_pc[py*1920 + px + 5]; // TODO: fix hacky way to deal with nan pc values
         }
-        //std::cout << "point: " << pt.x << ", " << pt.y << ", " << pt.z << std::endl;
 
         // transform point into camera frame to publish
         double min_dist = std::numeric_limits<double>::max();
@@ -431,7 +318,6 @@ int findBlocks(list<boost::shared_ptr<PointSetShape> >& out)
                 min_idx = j;
             }
         }
-
         tf::Vector3 cam_pt;
         cam_pt.setX(object_centers[min_idx].x);
         cam_pt.setY(object_centers[min_idx].y);
@@ -681,20 +567,15 @@ int main(int argc, char **argv)
     n->getParam("y_clip_min", y_clip_min_);
     n->getParam("y_clip_max", y_clip_max_);*/
 
-    x_clip_min = -0.18; // right bound
-    x_clip_max = 0.4; // left bound
-    y_clip_min = -0.65; // top bound
-    y_clip_max = -0.18; // bottom bound
-    z_clip_min = 0.02; // TODO: add back plane segmentation!
-    z_clip_max = 0.35;
+    // clip 2d image and point cloud via pixel indices
+    img_x_min = 420;
+    img_x_max = 840;
+    img_y_min = 420;
+    img_y_max = 820;
 
-    //New setup
-    x_clip_min = -0.5;
-    x_clip_max = -0.1;
-    y_clip_min = 0.0;
-    y_clip_max = 0.32;
-    z_clip_min = -0.1;
-    z_clip_max = 0.35;
+    // clip z space
+    z_clip_min = -0.26;
+    z_clip_max = 0.1;
 
     ros::Subscriber original_pc_sub = n->subscribe("/kinect2/hd/points", 1, getCloud);
 
@@ -707,7 +588,6 @@ int main(int argc, char **argv)
     objects_pub_ = n->advertise<objrec_msgs::RecognizedObjects>("recognized_objects",20);
     markers_pub_ = n->advertise<visualization_msgs::MarkerArray>("recognized_objects_markers",20);
 
-    // add FindBlocks service
     ros::ServiceServer find_blocks_server_ = n->advertiseService("find_blocks", recognizeBlocks);
 
     blocks_pc_pub = n->advertise<sensor_msgs::PointCloud2>("filtered_blocks", 1);
