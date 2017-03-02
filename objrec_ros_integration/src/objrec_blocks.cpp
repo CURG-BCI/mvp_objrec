@@ -52,7 +52,9 @@ tf::TransformListener *tf_listener;
 std::string block_model_vtk;
 std::string block_model_stl;
 vtkPolyData *block_model_data;
-UserData *block_user_data;
+UserData *block_user_data_small;
+UserData *block_user_data_medium;
+UserData *block_user_data_large;
 void load_block_model();
 ros::Publisher objects_pub_;
 ros::Publisher markers_pub_;
@@ -270,10 +272,10 @@ int findBlocks(list<boost::shared_ptr<PointSetShape> >& out)
         if (object_centers.size() == 0) break; // TODO: possibly recognizes incorrect blocks this way
 
         float rectArea = minRect[i].size.width * minRect[i].size.height; // Ignore tiny contours found from noise in image (like a dent in foam)
-        std::cout << "clusters left: " << object_centers.size() << std::endl;
-        std::cout << "area " << i << ": " << mu[i].m00 << " vs rectArea: " << rectArea << std::endl;
         //if (mu[i].m00 < 500) continue; // use rectArea, moments sometimes returns too small for some reason
         if (rectArea < 600) continue;
+        std::cout << "clusters left: " << object_centers.size() << std::endl;
+        std::cout << "area " << i << ": " << mu[i].m00 << " vs rectArea: " << rectArea << std::endl;
 
         Scalar color = Scalar( rng.uniform(0, 255), rng.uniform(0,255), rng.uniform(0,255) );
 
@@ -286,7 +288,15 @@ int findBlocks(list<boost::shared_ptr<PointSetShape> >& out)
         line( croppedImg, rect_points[j], rect_points[(j+1)%4], color, 1, 8 );
 
         float rotation = minRect[i].angle;
-        ostringstream ss; ss << rotation; string r(ss.str());
+        ostringstream ss;
+        if (rectArea > 7000) {
+            ss << "large: ";
+        } else if (rectArea < 4500) {
+            ss << "small: ";
+        } else {
+            ss << "medium: ";
+        }
+        ss << rotation; string r(ss.str());
         putText(croppedImg, r.c_str(), cvPoint(mc[i].x,mc[i].y), FONT_HERSHEY_COMPLEX_SMALL, 0.8, cvScalar(200,200,250), 1, CV_AA);
 
         // index into point cloud to get position of center of mass
@@ -337,6 +347,14 @@ int findBlocks(list<boost::shared_ptr<PointSetShape> >& out)
         rigid_transform[10] = cam_pt.y();
         rigid_transform[11] = cam_pt.z();
 
+        UserData *block_user_data;
+        if (rectArea > 7000) {
+            block_user_data = block_user_data_large;
+        } else if (rectArea < 4500) {
+            block_user_data = block_user_data_small;
+        } else {
+            block_user_data = block_user_data_medium;
+        }
         boost::shared_ptr<PointSetShape> shape = boost::make_shared<PointSetShape>(block_user_data, block_model_data, rigid_transform, block_model_data);
         out.push_back(shape);
 
@@ -544,8 +562,12 @@ void load_block_model()
     }
 
     // Create new model user data
-    block_user_data = new UserData();
-    block_user_data->setLabel(model_label.c_str());
+    block_user_data_small = new UserData();
+    block_user_data_small->setLabel("block_50");
+    block_user_data_medium = new UserData();
+    block_user_data_medium->setLabel("block_64");
+    block_user_data_large = new UserData();
+    block_user_data_large->setLabel("block_76");
 
     vtkSmartPointer<vtkPolyData> model_data = reader->GetOutput();
     block_model_data = scale_vtk_model(model_data);
