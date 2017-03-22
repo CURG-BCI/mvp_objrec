@@ -130,21 +130,7 @@ ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
     objrec_->setNumberOfThreads(num_threads_);
     objrec_->setCUDADeviceMap(cuda_device_map_);
 
-    isBlockMode = false;
-    string experiment_type;
-    if (nh.getParam("/experiment_type", experiment_type)) {
-        if (experiment_type == "block") {
-            isBlockMode = true;
-        }
-    }
-
-    if (isBlockMode) {
-        // Get block
-        this->load_block_model();
-    } else {
-        // Get model info from rosparam
-        this->load_models_from_rosparam();
-    }
+    this->load_models_from_rosparam();
 
     // Get additional parameters from ROS
     require_param(nh,"success_probability",success_probability_);
@@ -153,9 +139,13 @@ ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
     // Plane detection parameters
     require_param(nh,"plane_thickness",plane_thickness_);
 
+    std::string pc_topic;
+    require_param(nh,"objrec_pc_topic",pc_topic);
+
     // Construct subscribers and publishers
     //pcl_cloud_sub_ = nh.subscribe("points", 1, &ObjRecInterface::pcl_cloud_cb, this);
-    pcl_cloud_sub_ = nh.subscribe("/filtered_pc", 1, &ObjRecInterface::pcl_cloud_cb, this);
+//    pcl_cloud_sub_ = nh.subscribe("/filtered_pc", 1, &ObjRecInterface::pcl_cloud_cb, this);
+    pcl_cloud_sub_ = nh.subscribe(pc_topic, 1, &ObjRecInterface::pcl_cloud_cb, this);
     objects_pub_ = nh.advertise<objrec_msgs::RecognizedObjects>("recognized_objects",20);
     markers_pub_ = nh.advertise<visualization_msgs::MarkerArray>("recognized_objects_markers",20);
     foreground_points_pub_ = nh.advertise<pcl::PointCloud<pcl::PointXYZ> >("foreground_points",10);
@@ -204,6 +194,7 @@ void ObjRecInterface::load_models_from_rosparam()
         require_param(nh_,"model_uris/"+model_label,model_uris_[model_label]);
         // TODO: make this optional
         require_param(nh_,"stl_uris/"+model_label,stl_uris_[model_label]);
+        ROS_INFO_STREAM("Loading object model " << model_label);
 
         // Add the model
         this->add_model(model_label, model_uris_[model_label]);
@@ -444,7 +435,7 @@ bool ObjRecInterface::recognize_objects(
 {
     // Downsample cloud
     {
-        ROS_DEBUG_STREAM("ObjRec: Downsampling full cloud from "<<cloud_full->points.size()<<" points...");
+        ROS_INFO_STREAM("ObjRec: Downsampling full cloud from "<<cloud_full->points.size()<<" points...");
         voxel_grid->setLeafSize(
                 downsample_voxel_size_,
                 downsample_voxel_size_,
@@ -452,7 +443,7 @@ bool ObjRecInterface::recognize_objects(
         voxel_grid->setInputCloud(cloud_full);
         voxel_grid->filter(*cloud);
 
-        ROS_DEBUG_STREAM("ObjRec: Downsampled cloud has "<<cloud->points.size()<<" points.");
+        ROS_INFO_STREAM("ObjRec: Downsampled cloud has "<<cloud->points.size()<<" points.");
     }
 
     // Remove plane points
@@ -475,7 +466,7 @@ bool ObjRecInterface::recognize_objects(
         return false;
     }
 
-    ROS_DEBUG_STREAM("Objrec: found plane with "<<inliers->indices.size()<<" points");
+    ROS_INFO_STREAM("Objrec: found plane with "<<inliers->indices.size()<<" points");
 
     // Flip plane if it's pointing away
     if(coefficients->values[2] > 0.0) {
@@ -493,7 +484,7 @@ bool ObjRecInterface::recognize_objects(
     extract.setNegative(true);
     extract.filter(*cloud);
 
-    ROS_DEBUG_STREAM("Objrec: extracted "<<cloud->points.size()<<" foreground points");
+    ROS_INFO_STREAM("Objrec: extracted "<<cloud->points.size()<<" foreground points");
 
     // Fill the foreground cloud
     foreground_points->SetNumberOfPoints(cloud->points.size());
@@ -521,16 +512,12 @@ bool ObjRecInterface::recognize_objects(
 
     // Detect models
     {
-        ROS_DEBUG_STREAM("ObjRec: Attempting recognition on "<<foreground_points->GetNumberOfPoints()<<" foregeound points...");
+        ROS_INFO_STREAM("ObjRec: Attempting recognition on "<<foreground_points->GetNumberOfPoints()<<" foregeound points...");
         detected_models.clear();
 
         int success;
 
-        if (isBlockMode) {
-            success = blockRecognition(foreground_points, detected_models);
-        } else {
-            success = objrec_->doRecognition(foreground_points, success_probability_, detected_models);
-        }
+        success = objrec_->doRecognition(foreground_points, success_probability_, detected_models);
 
         if (success == -1){
             ROS_ERROR_STREAM("success -1");
@@ -593,7 +580,7 @@ bool ObjRecInterface::recognizeObjects(objrec_ros_integration::FindObjects::Requ
 
     std::list<boost::shared_ptr<PointSetShape> > detected_models;
 
-    ROS_DEBUG_STREAM("ObjRec: Aggregating point clouds... ");
+    ROS_INFO_STREAM("ObjRec: Aggregating point clouds... ");
     {
         // Scope for syncrhonization
 
@@ -608,7 +595,7 @@ bool ObjRecInterface::recognizeObjects(objrec_ros_integration::FindObjects::Requ
         // Lock the buffer mutex
         boost::mutex::scoped_lock buffer_lock(buffer_mutex_);
 
-        ROS_DEBUG_STREAM("ObjRec: Computing objects from "
+        ROS_INFO_STREAM("ObjRec: Computing objects from "
                 <<clouds_.size()<<" point clounds "
                 <<"between "<<(ros::Time::now() - pcl_conversions::fromPCL(clouds_.back()->header).stamp)
                 <<" to "<<(ros::Time::now() - pcl_conversions::fromPCL(clouds_.front()->header).stamp)<<" seconds after they were acquired.");
@@ -779,12 +766,7 @@ void ObjRecInterface::publish_markers(const objrec_msgs::RecognizedObjects &obje
 //        ROS_WARN("marker.pose:w %f", marker.pose.orientation.w);
 //marker.pose.orientation.z = 0 - marker.pose.orientation.z;
 
-
-        if (isBlockMode) {
-            marker.mesh_resource = block_model_stl;
-        } else {
-            marker.mesh_resource = stl_uris_[it->label];
-        }
+        marker.mesh_resource = stl_uris_[it->label];
 
         marker_array.markers.push_back(marker);
     }

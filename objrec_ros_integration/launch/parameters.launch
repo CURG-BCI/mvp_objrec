@@ -68,4 +68,8 @@
   <param name="use_z_clip" value="false"/>
   <param name="use_x_clip" value="true"/>
   <param name="use_y_clip" value="true"/>
+
+  <!-- <param name="objrec_pc_topic" value="/camera/depth_registered/points" /> -->
+  <!--<param name="objrec_pc_topic" value="/filtered_pc" />-->
+  <param name="objrec_pc_topic" value="/filtered_pc_kinect360" />
 </launch>

@@ -355,6 +355,7 @@ int findBlocks(list<boost::shared_ptr<PointSetShape> >& out)
         } else {
             block_user_data = block_user_data_medium;
         }
+        //block_user_data = block_user_data_small;
         boost::shared_ptr<PointSetShape> shape = boost::make_shared<PointSetShape>(block_user_data, block_model_data, rigid_transform, block_model_data);
         out.push_back(shape);
 
@@ -430,7 +431,7 @@ bool recognizeBlocks(objrec_ros_integration::FindObjects::Request &req, objrec_r
     objects_msg.header.stamp = pcl_conversions::fromPCL(cloud->header).stamp;
     objects_msg.header.frame_id = cloud->header.frame_id;
 
-    std::cout << "publishing " << detected_models.size() << "models..." << std::endl;
+    std::cout << "publishing " << detected_models.size() << "models..." << objects_msg.header.frame_id << std::endl;
     for(std::list<boost::shared_ptr<PointSetShape> >::iterator it = detected_models.begin();
             it != detected_models.end();
             ++it)
