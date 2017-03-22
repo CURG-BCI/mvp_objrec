@@ -1,25 +1,17 @@
 <launch>
   <rosparam ns="models">
-    ['gillette_shaving_gel', 'garnier_shampoo_bottle', 'campbells_condensed_tomato_soup', 'block', 'purple_wood_block_1inx1in', 'block_large_scanned']
+    ['gillette_shaving_gel', 'garnier_shampoo_bottle', 'all', 'rubbermaid_ice_guard_pitcher_blue']
   </rosparam>
   <group ns="model_uris">
-    <param name="garnier_shampoo_bottle" value="package://object_models/models/cgdb/robert_data_unique/garnier_shampoo_bottle.vtk" />
-    <param name="gillette_shaving_gel" value="package://object_models/models/cgdb/robert_data_unique/gillette_shaving_gel.vtk" />
-    <param name="all" value="package://object_models/models/cgdb/robert_data_unique/all.vtk" />
-    <param name="campbells_condensed_tomato_soup" value="package://object_models/models/cgdb/robert_data_unique/campbells_condensed_tomato_soup.vtk" />
-    <!-- <param name="banana" value="package://object_models/models/cgdb/robert_data_unique/banana.vtk" /> -->
-    <param name="block" value="package://object_models/models/cgdb/robert_data_unique/block.vtk" />
-    <param name="purple_wood_block_1inx1in" value="package://object_models/models/cgdb/robert_data_unique/purple_wood_block_1inx1in.vtk" />
-    <param name="block_large_scanned" value="package://object_models/models/cgdb/robert_data_unique/block_large_scanned.vtk" />
+    <param name="garnier_shampoo_bottle" value="package://object_models/models/cgdb/garnier_shampoo_bottle.vtk" />
+    <param name="gillette_shaving_gel" value="package://object_models/models/cgdb/gillette_shaving_gel.vtk" />
+    <param name="all" value="package://object_models/models/cgdb/all.vtk" />
+    <param name="rubbermaid_ice_guard_pitcher_blue" value="package://object_models/models/cgdb/rubbermaid_ice_guard_pitcher_blue.vtk" />
   </group>
   <group ns="stl_uris">
-    <param name="garnier_shampoo_bottle" value="package://object_models/models/cgdb/robert_data_unique/garnier_shampoo_bottle.vtk.stl" />
-    <param name="gillette_shaving_gel" value="package://object_models/models/cgdb/robert_data_unique/gillette_shaving_gel.vtk.stl" />
-    <param name="all" value="package://object_models/models/cgdb/robert_data_unique/all.vtk.stl" />
-    <param name="campbells_condensed_tomato_soup" value="package://object_models/models/cgdb/robert_data_unique/campbells_condensed_tomato_soup.vtk.stl" />
-    <!-- <param name="banana" value="package://object_models/models/cgdb/robert_data_unique/banana.vtk.stl" /> -->
-    <param name="block" value="package://object_models/models/cgdb/robert_data_unique/block.vtk.stl" />
-    <param name="purple_wood_block_1inx1in" value="package://object_models/models/cgdb/robert_data_unique/purple_wood_block_1inx1in.vtk.stl" />
-    <param name="block_large_scanned" value="package://object_models/models/cgdb/robert_data_unique/block_large_scanned.vtk.stl" />
+    <param name="garnier_shampoo_bottle" value="package://object_models/models/cgdb/garnier_shampoo_bottle.vtk.stl" />
+    <param name="gillette_shaving_gel" value="package://object_models/models/cgdb/gillette_shaving_gel.vtk.stl" />
+    <param name="all" value="package://object_models/models/cgdb/all.vtk.stl" />
+    <param name="rubbermaid_ice_guard_pitcher_blue" value="package://object_models/models/cgdb/rubbermaid_ice_guard_pitcher_blue.stl" />
   </group>
 </launch>
