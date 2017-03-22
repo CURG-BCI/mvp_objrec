@@ -1,6 +1,6 @@
 <launch>
   <rosparam ns="models">
-    ['gillette_shaving_gel', 'garnier_shampoo_bottle', 'rubbermaid_ice_guard_pitcher_blue']
+    ['gillette_shaving_gel', 'garnier_shampoo_bottle', 'rubbermaid_ice_guard_pitcher_blue', 'pringles_original']
   </rosparam>
   <group ns="model_uris">
     <param name="garnier_shampoo_bottle" value="package://object_models/models/cgdb/garnier_shampoo_bottle.vtk" />
@@ -12,6 +12,7 @@
     <param name="purple_wood_block_1inx1in" value="package://object_models/models/cgdb/robert_data_unique/purple_wood_block_1inx1in.vtk" />
     <param name="block_large_scanned" value="package://object_models/models/cgdb/robert_data_unique/block_large_scanned.vtk" />
     <param name="rubbermaid_ice_guard_pitcher_blue" value="package://object_models/models/cgdb/rubbermaid_ice_guard_pitcher_blue.vtk" />
+    <param name="pringles_original" value="package://object_models/models/cgdb/pringles_original.vtk" />
   </group>
   <group ns="stl_uris">
     <param name="garnier_shampoo_bottle" value="package://object_models/models/cgdb/garnier_shampoo_bottle.vtk.stl" />
@@ -23,5 +24,6 @@
     <param name="purple_wood_block_1inx1in" value="package://object_models/models/cgdb/robert_data_unique/purple_wood_block_1inx1in.vtk.stl" />
     <param name="block_large_scanned" value="package://object_models/models/cgdb/robert_data_unique/block_large_scanned.vtk.stl" />
     <param name="rubbermaid_ice_guard_pitcher_blue" value="package://object_models/models/cgdb/rubbermaid_ice_guard_pitcher_blue.stl" />
+    <param name="pringles_original" value="package://object_models/models/cgdb/pringles_original.stl" />
   </group>
 </launch>
