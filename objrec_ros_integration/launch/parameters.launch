@@ -51,19 +51,19 @@
   <param name="use_cuda" value="true" />
 
   <!-- Clipping box -->
-  <param name="x_clip_min1" value="-0.2"/>
-  <param name="x_clip_max1" value="0.23"/>
-  <param name="y_clip_min1" value="-0.65"/>
-  <param name="y_clip_max1" value="0.1"/>
-  <param name="z_clip_min1" value="0.0"/>
-  <param name="z_clip_max1" value="0.4"/>
+  <!--<param name="x_clip_min1" value="-0.2"/>-->
+  <!--<param name="x_clip_max1" value="0.23"/>-->
+  <!--<param name="y_clip_min1" value="-0.65"/>-->
+  <!--<param name="y_clip_max1" value="0.1"/>-->
+  <!--<param name="z_clip_min1" value="0.0"/>-->
+  <!--<param name="z_clip_max1" value="0.4"/>-->
 
-  <param name="x_clip_min" value="-0.58"/>
-  <param name="x_clip_max" value="-0.18"/>
-  <param name="y_clip_min" value="0.128"/>
-  <param name="y_clip_max" value="0.52"/>
-  <param name="z_clip_min" value="-0.1"/>
-  <param name="z_clip_max" value="0.35"/>
+  <param name="x_clip_min" value="-0.25"/>
+  <param name="x_clip_max" value="0.1"/>
+  <param name="y_clip_min" value="0.15"/>
+  <param name="y_clip_max" value="0.45"/>
+  <param name="z_clip_min" value="0.075"/>
+  <param name="z_clip_max" value="0.3"/>
 
   <param name="use_z_clip" value="false"/>
   <param name="use_x_clip" value="true"/>

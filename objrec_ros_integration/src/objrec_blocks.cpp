@@ -50,9 +50,14 @@ ros::Publisher blocks_pc_pub;
 
 float z_clip_min;
 float z_clip_max;
+float x_clip_min;
+float x_clip_max;
+float y_clip_min;
+float y_clip_max;
+
 int img_x_min;
-int img_x_max;
 int img_y_min;
+int img_x_max;
 int img_y_max;
 
 tf::TransformListener *tf_listener;
@@ -118,33 +123,29 @@ void getCloud(const sensor_msgs::PointCloud2ConstPtr &points_msg)
 
     cloud = cloud_tmp;
 }
-cv::Rect getImageRect(int &_pxMin, int &_pyMin)
-{
-    cout << "---> cropping image bounds: " << img_x_min << ", " << img_x_max << ", " << img_y_min << ", " << img_y_max << endl;
-    _pxMin = img_x_min;
-    _pyMin = img_y_min;
-    cv::Rect rect(img_x_min, img_y_min, img_x_max - img_x_min, img_y_max - img_y_min);
-    return rect;
-}
+//cv::Rect getImageRect(int &_pxMin, int &_pyMin)
+//{
+//    cout << "---> cropping image bounds: " << img_x_min << ", " << img_x_max << ", " << img_y_min << ", " << img_y_max << endl;
+//    _pxMin = img_x_min;
+//    _pyMin = img_y_min;
+//    cv::Rect rect(img_x_min, img_y_min, img_x_max - img_x_min, img_y_max - img_y_min);
+//    return rect;
+//}
 
 cv::Rect getImageRectTransform(int &_pxMin, int &_pyMin, tf::Transform &tf_to_cam)
 {
-    double world_x_min = -0.25;
-    double world_x_max = 0.15;
-    double world_y_min = 0.1;
-    double world_y_max = 0.45;
-    double world_z_min = 0.0;
-    double world_z_max = 0.3;
 
     image_geometry::PinholeCameraModel cam_model_;
     cam_model_.fromCameraInfo(info_msg);
 
     //Minimum point transform
     tf::Vector3 world_min_pt_3d;
-    world_min_pt_3d.setX(-0.25);
-    world_min_pt_3d.setY(0.1);
-    world_min_pt_3d.setZ(0.0);
+    world_min_pt_3d.setX(x_clip_min);
+    world_min_pt_3d.setY(y_clip_min);
+    world_min_pt_3d.setZ(z_clip_min);
     tf::Vector3 camera_min_pt_3d = tf_to_cam * world_min_pt_3d;
+
+    cout << "---> World cropping bounds: " << x_clip_min << ", " << x_clip_max << ", " << y_clip_min << ", " << y_clip_max << ", " << z_clip_min << ", " << z_clip_max << std::endl;
 
     cv::Point3d min_pt_3d(camera_min_pt_3d.x(), camera_min_pt_3d.y(), camera_min_pt_3d.z());
     std::cout << "min_pt_3d: " << min_pt_3d.x << " " << min_pt_3d.y << " " << min_pt_3d.z << std::endl;
@@ -153,9 +154,9 @@ cv::Rect getImageRectTransform(int &_pxMin, int &_pyMin, tf::Transform &tf_to_ca
 
     //Maximum point transform
     tf::Vector3 world_max_pt_3d;
-    world_max_pt_3d.setX(0.15);
-    world_max_pt_3d.setY(0.45);
-    world_max_pt_3d.setZ(0.0);
+    world_max_pt_3d.setX(x_clip_max);
+    world_max_pt_3d.setY(y_clip_max);
+    world_max_pt_3d.setZ(z_clip_min);
     tf::Vector3 camera_max_pt_3d = tf_to_cam * world_max_pt_3d;
 
     cv::Point3d max_pt_3d(camera_max_pt_3d.x(), camera_max_pt_3d.y(), camera_max_pt_3d.z());
@@ -163,11 +164,13 @@ cv::Rect getImageRectTransform(int &_pxMin, int &_pyMin, tf::Transform &tf_to_ca
     cv::Point2d max_pt;
     max_pt = cam_model_.project3dToPixel(max_pt_3d);
 
+    cout << "---> pre-cropping image bounds: " << min_pt.x << ", " << max_pt.x << ", " << min_pt.y << ", " << max_pt.y << endl;
+
     //Generate image crop
-    int img_x_min = min(min_pt.x, max_pt.x);
-    int img_y_min = min(min_pt.y, max_pt.y);
-    int img_x_max = max(min_pt.x, max_pt.x);
-    int img_y_max = max(min_pt.y, max_pt.y);
+    img_x_min = max(0, (int) min(min_pt.x, max_pt.x));
+    img_y_min = max(0, (int) min(min_pt.y, max_pt.y));
+    img_x_max = min(1920, (int) max(min_pt.x, max_pt.x));
+    img_y_max = min(1080, (int) max(min_pt.y, max_pt.y));
 
     cout << "---> cropping image bounds: " << img_x_min << ", " << img_x_max << ", " << img_y_min << ", " << img_y_max << endl;
 
@@ -655,20 +658,16 @@ int main(int argc, char **argv)
     cam_info_init = false;
 
     // TODO: put this in launch file to share with filter_server.cpp (pc filter)
-    /*n->getParam("x_clip_min", x_clip_min_);
-    n->getParam("x_clip_max", x_clip_max_);
-    n->getParam("y_clip_min", y_clip_min_);
-    n->getParam("y_clip_max", y_clip_max_);*/
-
-    // clip 2d image and point cloud via pixel indices
-    img_x_min = 420;
-    img_x_max = 820;
-    img_y_min = 420;
-    img_y_max = 820;
+    n->getParam("x_clip_min", x_clip_min);
+    n->getParam("x_clip_max", x_clip_max);
+    n->getParam("y_clip_min", y_clip_min);
+    n->getParam("y_clip_max", y_clip_max);
+    n->getParam("z_clip_min", z_clip_min);
+    n->getParam("z_clip_max", z_clip_max);
 
     // clip z space
-    z_clip_min = 0.1;
-    z_clip_max = 0.3;
+//    z_clip_min = 0.1;
+//    z_clip_max = 0.3;
 
     ros::Subscriber original_pc_sub = n->subscribe("/kinect2/hd/points", 1, getCloud);
 
