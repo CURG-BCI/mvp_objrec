@@ -7,7 +7,7 @@ project(objrec_ros_integration)
 find_package(catkin REQUIRED COMPONENTS roscpp tf geometry_msgs kdl_conversions
   visualization_msgs sensor_msgs pcl_ros pcl_conversions resource_retriever
   dynamic_reconfigure nodelet objrec_msgs objrec_core message_generation
-  image_transport cv_bridge)
+  image_transport cv_bridge image_geometry)
 
 # Build vtk-stl converter
 find_package(VTK REQUIRED)

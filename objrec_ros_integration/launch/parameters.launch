@@ -71,5 +71,5 @@
 
   <!-- <param name="objrec_pc_topic" value="/camera/depth_registered/points" /> -->
   <!--<param name="objrec_pc_topic" value="/filtered_pc" />-->
-  <param name="objrec_pc_topic" value="/filtered_pc_kinect360" />
+  <param name="objrec_pc_topic" value="/filtered_pc_kinectone" />
 </launch>

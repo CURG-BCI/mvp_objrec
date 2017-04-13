@@ -7,6 +7,11 @@
 #include <sensor_msgs/PointCloud2.h>
 #include <tf/transform_listener.h>
 
+#include <opencv/cv.h>
+#include <image_geometry/pinhole_camera_model.h>
+#include <boost/foreach.hpp>
+#include <sensor_msgs/image_encodings.h>
+
 #include <image_transport/image_transport.h>
 #include <opencv2/core/core.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
@@ -37,7 +42,9 @@ using namespace std;
 using namespace cv;
 
 Mat rgbImg;
+sensor_msgs::CameraInfoConstPtr info_msg;
 bool rgbInit;
+bool cam_info_init;
 ros::NodeHandle* n;
 ros::Publisher blocks_pc_pub;
 
@@ -90,6 +97,16 @@ void saveRGBImg(const sensor_msgs::ImageConstPtr& msg)
     }
 }
 
+void saveCamInfo(const sensor_msgs::CameraInfoConstPtr& msg)
+{
+    try {
+        info_msg = msg;
+        cam_info_init = true;
+    } catch(cv_bridge::Exception& e) {
+        ROS_ERROR("Could not load cam_info.");
+    }
+}
+
 void getCloud(const sensor_msgs::PointCloud2ConstPtr &points_msg)
 {
     // Lock the buffer mutex while we're capturing a new point cloud
@@ -110,9 +127,59 @@ cv::Rect getImageRect(int &_pxMin, int &_pyMin)
     return rect;
 }
 
+cv::Rect getImageRectTransform(int &_pxMin, int &_pyMin, tf::Transform &tf_to_cam)
+{
+    double world_x_min = -0.25;
+    double world_x_max = 0.15;
+    double world_y_min = 0.1;
+    double world_y_max = 0.45;
+    double world_z_min = 0.0;
+    double world_z_max = 0.3;
+
+    image_geometry::PinholeCameraModel cam_model_;
+    cam_model_.fromCameraInfo(info_msg);
+
+    //Minimum point transform
+    tf::Vector3 world_min_pt_3d;
+    world_min_pt_3d.setX(-0.25);
+    world_min_pt_3d.setY(0.1);
+    world_min_pt_3d.setZ(0.0);
+    tf::Vector3 camera_min_pt_3d = tf_to_cam * world_min_pt_3d;
+
+    cv::Point3d min_pt_3d(camera_min_pt_3d.x(), camera_min_pt_3d.y(), camera_min_pt_3d.z());
+    std::cout << "min_pt_3d: " << min_pt_3d.x << " " << min_pt_3d.y << " " << min_pt_3d.z << std::endl;
+    cv::Point2d min_pt;
+    min_pt = cam_model_.project3dToPixel(min_pt_3d);
+
+    //Maximum point transform
+    tf::Vector3 world_max_pt_3d;
+    world_max_pt_3d.setX(0.15);
+    world_max_pt_3d.setY(0.45);
+    world_max_pt_3d.setZ(0.0);
+    tf::Vector3 camera_max_pt_3d = tf_to_cam * world_max_pt_3d;
+
+    cv::Point3d max_pt_3d(camera_max_pt_3d.x(), camera_max_pt_3d.y(), camera_max_pt_3d.z());
+    std::cout << "max_pt_3d: " << max_pt_3d.x << " " << max_pt_3d.y << " " << max_pt_3d.z << std::endl;
+    cv::Point2d max_pt;
+    max_pt = cam_model_.project3dToPixel(max_pt_3d);
+
+    //Generate image crop
+    int img_x_min = min(min_pt.x, max_pt.x);
+    int img_y_min = min(min_pt.y, max_pt.y);
+    int img_x_max = max(min_pt.x, max_pt.x);
+    int img_y_max = max(min_pt.y, max_pt.y);
+
+    cout << "---> cropping image bounds: " << img_x_min << ", " << img_x_max << ", " << img_y_min << ", " << img_y_max << endl;
+
+    _pxMin = img_x_min;
+    _pyMin = img_y_min;
+    cv::Rect rect(img_x_min, img_y_min, img_x_max - img_x_min, img_y_max - img_y_min);
+    return rect;
+}
+
 int findBlocks(list<boost::shared_ptr<PointSetShape> >& out)
 {
-    if (!rgbInit) return -1;
+    if (!rgbInit || !cam_info_init) return -1;
 
     tf::StampedTransform transform;
     tf::StampedTransform transform_world_to_camera;
@@ -188,8 +255,8 @@ int findBlocks(list<boost::shared_ptr<PointSetShape> >& out)
     std::vector<pcl::PointIndices> cluster_indices;
     pcl::EuclideanClusterExtraction<pcl::PointXYZRGB> ec;
     ec.setClusterTolerance(0.02); // 2cm
-    ec.setMinClusterSize(10);
-    ec.setMaxClusterSize(25000);
+    ec.setMinClusterSize(100);
+//    ec.setMaxClusterSize(25000);
     ec.setSearchMethod(tree);
     ec.setInputCloud(cloud_filtered_xyz);
     ec.extract(cluster_indices);
@@ -223,7 +290,7 @@ int findBlocks(list<boost::shared_ptr<PointSetShape> >& out)
     /* find orientation from 2d RGB image */
     // crop the 2d image based on x and y clipping values
     int pxMin = 0, pyMin = 0;
-    cv::Rect rect = getImageRect(pxMin, pyMin);
+    cv::Rect rect = getImageRectTransform(pxMin, pyMin, tf_to_cam);
 
     cv::Mat croppedImg;
     croppedImg = rgbImg(rect);
@@ -236,16 +303,16 @@ int findBlocks(list<boost::shared_ptr<PointSetShape> >& out)
     double threshold_value = 125;
     int threshold_type = 1; //binary inverted
     double max_BINARY_value = 255;
-    threshold( src_gray, src_binary, threshold_value, max_BINARY_value,threshold_type );
+    threshold( src_gray, src_binary, threshold_value, max_BINARY_value, threshold_type);
 
-    //blur(src_gray, src_gray, Size(3,3));
+//    blur(src_gray, src_gray, Size(3,3));
 
     RNG rng(12345);
     Mat canny_output;
     vector<vector<Point> > contours;
     vector<Vec4i> hierarchy;
 
-    //std::cout << "---------- detect edges ----------" << std::endl;
+    std::cout << "---------- detect edges ----------" << std::endl;
     /// Detect edges using canny
     int thresh = 90;
     Canny( src_binary, canny_output, thresh, thresh*3, 3 );
@@ -265,6 +332,8 @@ int findBlocks(list<boost::shared_ptr<PointSetShape> >& out)
         ///  Get the mass centers
         mc[i] = Point2f( mu[i].m10/mu[i].m00 , mu[i].m01/mu[i].m00 );
     }
+
+    std::cout << "found " << contours.size() << " contours..." << std::endl;
 
     /// Find orientation and draw contours
     for( int i = 0; i < contours.size(); i++ ) {
@@ -583,6 +652,7 @@ int main(int argc, char **argv)
     tf_listener = &tfl;
 
     rgbInit = false;
+    cam_info_init = false;
 
     // TODO: put this in launch file to share with filter_server.cpp (pc filter)
     /*n->getParam("x_clip_min", x_clip_min_);
@@ -592,19 +662,21 @@ int main(int argc, char **argv)
 
     // clip 2d image and point cloud via pixel indices
     img_x_min = 420;
-    img_x_max = 840;
+    img_x_max = 820;
     img_y_min = 420;
     img_y_max = 820;
 
     // clip z space
-    z_clip_min = -0.26;
-    z_clip_max = 0.1;
+    z_clip_min = 0.1;
+    z_clip_max = 0.3;
 
     ros::Subscriber original_pc_sub = n->subscribe("/kinect2/hd/points", 1, getCloud);
 
     cv::startWindowThread();
     image_transport::ImageTransport it(*n);
     image_transport::Subscriber sub = it.subscribe("/kinect2/hd/image_color_rect", 1, saveRGBImg);
+
+    ros::Subscriber cam_info_sub = n->subscribe("/kinect2/hd/camera_info", 1, saveCamInfo);
 
     load_block_model();
 
