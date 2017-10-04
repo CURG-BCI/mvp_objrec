@@ -1,0 +1,5 @@
+location: .
+sources:
+- name: objrec_core/ObjRecRANSAC
+  repo: git@github.com:CURG/ObjRecRANSAC.git
+  rev: master

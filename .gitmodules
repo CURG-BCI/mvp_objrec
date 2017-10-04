@@ -1,3 +1,0 @@
-[submodule "objrec_core/ObjRecRANSAC"]
-	path = objrec_core/ObjRecRANSAC
-	url = git@github.com:CURG/ObjRecRANSAC.git
