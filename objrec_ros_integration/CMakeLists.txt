@@ -38,7 +38,7 @@ catkin_package(
 )
 
 add_executable(vtk_to_stl src/vtk_to_stl.cpp)
-target_link_libraries(vtk_to_stl vtkHybrid)
+target_link_libraries(vtk_to_stl ${VTK_LIBRARIES})
 
 # Add objrec nodelet
 include_directories(include ${catkin_INCLUDE_DIRS})
@@ -61,7 +61,7 @@ add_executable(objrec_blocks src/objrec_blocks.cpp)
 
 MESSAGE( STATUS "catkin_LIBRARIES " ${catkin_LIBRARIES} )
 
-target_link_libraries(objrecransac_interface ${VTK_LIBS} vtkHybrid ${catkin_LIBRARIES})
+target_link_libraries(objrecransac_interface ${VTK_LIBS} ${catkin_LIBRARIES})
 target_link_libraries(objrecransac_nodelet objrecransac_interface ${catkin_LIBRARIES})
 target_link_libraries(objrec_node objrecransac_interface ${catkin_LIBRARIES})
 target_link_libraries(objrec_blocks ${catkin_LIBRARIES})
